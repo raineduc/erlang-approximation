@@ -16,10 +16,10 @@
 %% API
 -export([all/0]).
 -export([test_linear_approx/1, test_exp_approx/1, test_power_approx/1,
-         test_not_possible_cases/1]).
+         test_not_possible_cases/1, test_interval_approx/1]).
 
 all() ->
-    [test_linear_approx, test_exp_approx, test_power_approx, test_not_possible_cases].
+    [test_linear_approx, test_exp_approx, test_power_approx, test_interval_approx, test_not_possible_cases].
 
 %%--------------------------------------------------------------------
 %% TEST CASES
@@ -50,6 +50,32 @@ test_power_approx(_) ->
     ?assert(abs(PowerFunc(1.1) - 3.14081) < 1.0e-3),
     ?assert(abs(PowerFunc(3.56) - 4.37604) < 1.0e-3),
     ?assert(abs(PowerFunc(137.512) - 12.2806) < 1.0e-2).
+
+test_interval_approx(_) ->
+    Points = [#point{x = -2.7, y = 7.76}, #point{x = -2.2, y = 7.76}, #point{x = 3.1, y = -1.9}, #point{x = 51.6, y = 10.151}, #point{x = 69.6, y = 111.151}],
+    Interval = {-2.3, 51.21},
+    MaxPoints = 3,
+
+    LinearFunc = approx_funcs_methods:build_on_interval(
+        Points,
+        fun approx_funcs_methods:calc_linear_least_squares/1,
+        Interval,
+        MaxPoints
+    ),
+    ?assert(abs(LinearFunc(-2.5) - 2.82725) < 1.0e-3),
+    ?assert(abs(LinearFunc(-1) - 3.0155) < 1.0e-3),
+    ?assert(abs(LinearFunc(4.43) - 3.696965) < 1.0e-3),
+    Interval2 = {-2.3, 51.199},
+    LinearFunc2 = approx_funcs_methods:build_on_interval(
+        Points,
+        fun approx_funcs_methods:calc_linear_least_squares/1,
+        Interval2,
+        MaxPoints
+    ),
+    ?assertNot(abs(LinearFunc2(-2.5) - 2.82725) < 1.0e-3),
+    ?assertNot(abs(LinearFunc2(-1) - 3.0155) < 1.0e-3),
+    ?assertNot(abs(LinearFunc2(4.43) - 3.696965) < 1.0e-3).
+
 
 test_not_possible_cases(_) ->
     Points =

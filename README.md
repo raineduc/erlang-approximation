@@ -189,6 +189,36 @@ __Лабораторная работа №3__
         end.
     ```
 
+5. __Аппроксимация отрезками__
+    ```erlang
+    build_on_interval(Points, ApproxBuilder, _, MaxPoints) when length(Points) =< MaxPoints ->
+      ApproxBuilder(Points);
+      build_on_interval(Points, ApproxBuilder, {IntervalStart, IntervalEnd}, MaxPoints) ->
+          ApproxWindow = choose_approx_window({1, MaxPoints}, Points, {IntervalStart, IntervalEnd}),
+          ApproxBuilder(ApproxWindow).
+    
+    choose_approx_window({WindowsStartIndex, WindowEndIndex}, Points, Interval)
+        when WindowEndIndex < length(Points) ->
+        CurrentMetric =
+            calc_window_convergence_metric({WindowsStartIndex, WindowEndIndex}, Points, Interval),
+        NextMetric =
+            calc_window_convergence_metric({WindowsStartIndex + 1, WindowEndIndex + 1},
+                                           Points,
+                                           Interval),
+        case NextMetric < CurrentMetric of
+            true ->
+                choose_approx_window({WindowsStartIndex + 1, WindowEndIndex + 1}, Points, Interval);
+            _ ->
+                lists:sublist(Points, WindowsStartIndex, WindowEndIndex - WindowsStartIndex + 1)
+        end;
+    choose_approx_window({WindowsStartIndex, WindowEndIndex}, Points, _) ->
+        lists:sublist(Points, WindowsStartIndex, WindowEndIndex - WindowsStartIndex + 1).
+    
+    calc_window_convergence_metric({WindowsStartIndex, WindowEndIndex}, Points, Interval) ->
+        point_deviation(lists:nth(WindowsStartIndex, Points), Interval)
+        + point_deviation(lists:nth(WindowEndIndex, Points), Interval).
+   ```
+
 ## Ввод программы
 * __Код__
     ```erlang
