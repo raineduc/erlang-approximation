@@ -31,7 +31,7 @@
 
 %% API
 -export([calc_linear_least_squares/1, calc_exp_least_squares/1,
-         calc_power_least_squares/1, calc_arguments/2]).
+         calc_power_least_squares/1, calc_arguments/2, build_on_interval/4]).
 
 calc_linear_least_squares(Points) when length(Points) > 1 ->
     PartialResult =
@@ -164,6 +164,42 @@ calc_power_least_squares([Point | Tail],
                                                     sy = SY + math:log(Y),
                                                     sxy = SXY + math:log(X) * math:log(Y),
                                                     number_of_points = NumberOfPoints})
+    end.
+
+build_on_interval(Points, ApproxBuilder, _, MaxPoints) when length(Points) =< MaxPoints ->
+    ApproxBuilder(Points);
+build_on_interval(Points, ApproxBuilder, {IntervalStart, IntervalEnd}, MaxPoints) ->
+    ApproxWindow = choose_approx_window({1, MaxPoints}, Points, {IntervalStart, IntervalEnd}),
+    ApproxBuilder(ApproxWindow).
+
+choose_approx_window({WindowsStartIndex, WindowEndIndex}, Points, Interval)
+    when WindowEndIndex < length(Points) ->
+    CurrentMetric =
+        calc_window_convergence_metric({WindowsStartIndex, WindowEndIndex}, Points, Interval),
+    NextMetric =
+        calc_window_convergence_metric({WindowsStartIndex + 1, WindowEndIndex + 1},
+                                       Points,
+                                       Interval),
+    case NextMetric < CurrentMetric of
+        true ->
+            choose_approx_window({WindowsStartIndex + 1, WindowEndIndex + 1}, Points, Interval);
+        _ ->
+            lists:sublist(Points, WindowsStartIndex, WindowEndIndex - WindowsStartIndex + 1)
+    end;
+choose_approx_window({WindowsStartIndex, WindowEndIndex}, Points, _) ->
+    lists:sublist(Points, WindowsStartIndex, WindowEndIndex - WindowsStartIndex + 1).
+
+calc_window_convergence_metric({WindowsStartIndex, WindowEndIndex}, Points, Interval) ->
+    point_deviation(lists:nth(WindowsStartIndex, Points), Interval)
+    + point_deviation(lists:nth(WindowEndIndex, Points), Interval).
+
+point_deviation(#point{x = X}, {IntervalStart, IntervalEnd}) ->
+    Left = X < IntervalStart,
+    Right = X > IntervalEnd,
+    case true of
+      Left -> IntervalStart - X;
+      Right -> X - IntervalEnd;
+      _ -> 0
     end.
 
 calc_arguments(ApproxFunc, Arguments) ->

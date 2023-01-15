@@ -5,8 +5,7 @@
 
 -include("approx_funcs_methods.hrl").
 
--record(approx_params,
-        {interval_start = -2.0, interval_end = 2.0, step = 0.2, approx_funcs = [l, e, p]}).
+-record(approx_params, {step = 0.2, approx_funcs = [l, e, p], max_points = 10}).
 
 %%====================================================================
 %% API functions
@@ -15,35 +14,18 @@
 %% escript Entry point
 main(Args) ->
     Params = parse_parameters(#approx_params{}, Args),
-    case read_points([]) of
-        {error, Reason} ->
-            exit(Reason);
-        Points ->
-            XValues =
-                approx_arg_gen:generate_arguments(Params#approx_params.interval_start,
-                                                  Params#approx_params.interval_end,
-                                                  Params#approx_params.step),
-            run_approx_funcs(Params#approx_params.approx_funcs, Points, XValues)
-    end,
+    process_points([], Params),
     erlang:halt(0).
 
 parse_parameters(Result, [Arg, NextArg | Tail]) ->
     case Arg of
-        "-is" ->
-            case string:to_float(NextArg) of
+        "-mp" ->
+            case string:to_integer(NextArg) of
                 {error, _} ->
-                    io:fwrite("Wrong -is argument value: ~p ~n", [NextArg]),
+                    io:fwrite("Wrong -mp argument value: ~p ~n", [NextArg]),
                     exit(1);
-                {Float, _} ->
-                    parse_parameters(Result#approx_params{interval_start = Float}, Tail)
-            end;
-        "-ie" ->
-            case string:to_float(NextArg) of
-                {error, _} ->
-                    io:fwrite("Wrong -ie argument value: ~p ~n", [NextArg]),
-                    exit(1);
-                {Float, _} ->
-                    parse_parameters(Result#approx_params{interval_end = Float}, Tail)
+                {Int, _} ->
+                    parse_parameters(Result#approx_params{max_points = Int}, Tail)
             end;
         "-step" ->
             case string:to_float(NextArg) of
@@ -85,22 +67,49 @@ parse_parameters(Result, [_ | _]) ->
 parse_parameters(Result, []) ->
     Result.
 
-read_points(Points) ->
+process_points(Points, Params) ->
     case io:fread("", "~f,~f") of
         {ok, [X, Y]} ->
-            read_points([#point{x = X, y = Y} | Points]);
+            NewPoints = lists:append(Points, [#point{x = X, y = Y}]),
+            case length(NewPoints) > 1 of
+                true ->
+                    [OldLastPoint | _] = lists:reverse(Points),
+                    case OldLastPoint#point.x < X of
+                        true ->
+                            XValues =
+                                approx_arg_gen:generate_arguments(OldLastPoint#point.x,
+                                                                  X,
+                                                                  Params#approx_params.step),
+                            run_approx_funcs(Params#approx_params.approx_funcs,
+                                             NewPoints,
+                                             XValues,
+                                             Params),
+                            io:fwrite("----------------------------------~n"),
+                            process_points(NewPoints, Params);
+                        _ ->
+                            io:fwrite("A next points X value must be greater than previous~n"),
+                            process_points(NewPoints, Params)
+                    end;
+                _ ->
+                    process_points(NewPoints, Params)
+            end;
         eof ->
-            Points;
+            ok;
         {error, Reason} ->
-            {error, Reason}
+            exit(Reason)
     end.
 
-run_approx_funcs([], _, _) ->
+run_approx_funcs([], _, _, _) ->
     ok;
-run_approx_funcs([FuncLiteral | Tail], ApproxPoints, XValues) ->
+run_approx_funcs([FuncLiteral | Tail], ApproxPoints, XValues, Params) ->
+    Interval = {lists:nth(1, XValues), lists:last(XValues)},
     case FuncLiteral of
         l ->
-            case approx_funcs_methods:calc_linear_least_squares(ApproxPoints) of
+            case approx_funcs_methods:build_on_interval(ApproxPoints,
+                                                        fun approx_funcs_methods:calc_linear_least_squares/1,
+                                                        Interval,
+                                                        Params#approx_params.max_points)
+            of
                 not_possible ->
                     io:fwrite("Linear approximation is not possible~n~n");
                 LinearFunc ->
@@ -108,7 +117,11 @@ run_approx_funcs([FuncLiteral | Tail], ApproxPoints, XValues) ->
                                   "Linear approximation")
             end;
         e ->
-            case approx_funcs_methods:calc_exp_least_squares(ApproxPoints) of
+            case approx_funcs_methods:build_on_interval(ApproxPoints,
+                                                        fun approx_funcs_methods:calc_exp_least_squares/1,
+                                                        Interval,
+                                                        Params#approx_params.max_points)
+            of
                 not_possible ->
                     io:fwrite("Exponential approximation is not possible~n~n");
                 ExpFunc ->
@@ -116,7 +129,11 @@ run_approx_funcs([FuncLiteral | Tail], ApproxPoints, XValues) ->
                                   "Exponential approximation")
             end;
         p ->
-            case approx_funcs_methods:calc_power_least_squares(ApproxPoints) of
+            case approx_funcs_methods:build_on_interval(ApproxPoints,
+                                                        fun approx_funcs_methods:calc_power_least_squares/1,
+                                                        Interval,
+                                                        Params#approx_params.max_points)
+            of
                 not_possible ->
                     io:fwrite("Power approximation is not possible~n~n");
                 PowerFunc ->
@@ -124,13 +141,13 @@ run_approx_funcs([FuncLiteral | Tail], ApproxPoints, XValues) ->
                                   "Power approximation")
             end
     end,
-    run_approx_funcs(Tail, ApproxPoints, XValues).
+    run_approx_funcs(Tail, ApproxPoints, XValues, Params).
 
 write_results(Points, ApproxStr) ->
     io:fwrite("~s: ~n", [ApproxStr]),
     io:fwrite("----------------------~n"),
     write_points(Points),
-    io:fwrite("----------------------~n~n~n").
+    io:fwrite("----------------------~n~n").
 
 write_points([]) ->
     ok;
