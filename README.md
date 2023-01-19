@@ -222,37 +222,26 @@ __Лабораторная работа №3__
 ## Ввод программы
 * __Код__
     ```erlang
-    process_points(Points, Params) ->
-    case io:fread("", "~f,~f") of
+    process_points(Params, Subscribers) ->
+      process_points({0, true}, Params, Subscribers).
+
+    process_points({PreviousXValue, FirstRead}, Params, Subscribers) ->
+      case io:fread("", "~f,~f") of
         {ok, [X, Y]} ->
-            NewPoints = lists:append(Points, [#point{x = X, y = Y}]),
-            case length(NewPoints) > 1 of
+            case (PreviousXValue < X) or FirstRead of
                 true ->
-                    [OldLastPoint | _] = lists:reverse(Points),
-                    case OldLastPoint#point.x < X of
-                        true ->
-                            XValues =
-                                approx_arg_gen:generate_arguments(OldLastPoint#point.x,
-                                                                  X,
-                                                                  Params#approx_params.step),
-                            run_approx_funcs(Params#approx_params.approx_funcs,
-                                             NewPoints,
-                                             XValues,
-                                             Params),
-                            io:fwrite("----------------------------------~n"),
-                            process_points(NewPoints, Params);
-                        _ ->
-                            io:fwrite("A next points X value must be greater than previous~n"),
-                            process_points(NewPoints, Params)
-                    end;
+                    send_point(#point{x = X, y = Y}, Subscribers),
+                    wait_and_process_replies(Subscribers),
+                    process_points({X, false}, Params, Subscribers);
                 _ ->
-                    process_points(NewPoints, Params)
+                    io:fwrite("A next points X value must be greater than previous~n"),
+                    process_points({PreviousXValue, false}, Params, Subscribers)
             end;
         eof ->
             ok;
         {error, Reason} ->
             exit(Reason)
-    end.
+      end.
     ```
 * __Пример ввода данных__
     ```
@@ -272,12 +261,23 @@ __Лабораторная работа №3__
 ## Вывод программы
 * __Код__
     ```erlang
-    write_results(Points, ApproxStr) ->
-    io:fwrite("~s: ~n", [ApproxStr]),
-    io:fwrite("----------------------~n"),
-    write_points(Points),
-    io:fwrite("----------------------~n~n~n").
+    write_approx_results(Points, ApproxTag) ->
+      case ApproxTag of
+          l -> io:fwrite("~s: ~n", ["Linear approximation"]);
+          e -> io:fwrite("~s: ~n", ["Exponential approximation"]);
+          p -> io:fwrite("~s: ~n", ["Power approximation"])
+      end,
+      io:fwrite("----------------------~n"),
+      write_points(Points),
+      io:fwrite("----------------------~n~n").
 
+    write_approx_not_possible_result(ApproxTag) ->
+        case ApproxTag of
+            l -> io:fwrite("Linear approximation is not possible~n~n");
+            e -> io:fwrite("Exponential approximation is not possible~n~n");
+            p -> io:fwrite("Power approximation is not possible~n~n")
+        end.
+    
     write_points([]) ->
         ok;
     write_points([Point | Tail]) ->
